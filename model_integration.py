@@ -3,6 +3,8 @@ from openai import OpenAI
 from neo4j import GraphDatabase
 from langgraph.graph import StateGraph, END
 from typing import TypedDict, List, Dict, Any, Optional
+#from galileo import galileo_context # The Galileo context manager
+#from galileo.openai import openai as gal_openai
 import json
 import os
 import re
@@ -89,7 +91,25 @@ def _introspect_schema_text() -> str:
             except Exception:
                 # Fallback when visualization proc isn't available.
                 node_rows = session.run("CALL db.labels()").data()
+                rel_rows = []
+                try:
+                    rel_rows = session.run("CALL db.relationshipTypes()").data()
+                except Exception:
+                    try:
+                        # Neo4j 5 alternative
+                        rel_rows = session.run("SHOW RELATIONSHIP TYPES").data()
+                    except Exception:
+                        rel_rows = []
                 labels = sorted({row.get("label", "?") for row in node_rows})
+                rel_types = sorted({
+                    row.get("relationshipType") or row.get("name") or row.get("type", "?")
+                    for row in rel_rows
+                })
+                if rel_types:
+                    return (
+                        f"Node labels: {', '.join(labels)}; "
+                        f"Relationship types: {', '.join(rel_types)}"
+                    )
                 return f"Node labels: {', '.join(labels)}"
     except Exception:
         return ""
@@ -153,6 +173,8 @@ def _generate_cypher_from_question(question: str, schema_text: str, model: Optio
     selected_model = model or os.environ.get("MODEL_FAST", "Meta-Llama-3.3-70B-Instruct")
     system_prompt = (
         "You are an expert in Neo4j Cypher. "
+        "Use ONLY the node labels and relationship types explicitly listed in the provided schema. "
+        "Do not invent labels or relationship types. If a label is not listed, do not use it. "
         "Return ONLY a single valid Cypher query. No commentary. No markdown fences."
     )
     user_prompt = (
@@ -193,7 +215,6 @@ def _query_db_node(state: GraphState) -> GraphState:
         rows = _run_cypher(cypher)
     except Exception as exc:
         rows = []
-        # Attach the error as a pseudo-row to preserve context for the reply agent.
         rows.append({"error": str(exc)})
 
     return {"schema": schema_text, "cypher": cypher, "rows": rows}
@@ -258,4 +279,4 @@ def generate_text(input: str) -> str:
     return result["answer"]
 
 if __name__ == "__main__":
-    print(generate_text("What is the best scene from The Matrix?"))
+    print(generate_text("Who were the actors in The Matrix?"))
