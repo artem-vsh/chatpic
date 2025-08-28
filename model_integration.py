@@ -150,7 +150,7 @@ def _extract_cypher_from_text(text: str) -> str:
 
 def _generate_cypher_from_question(question: str, schema_text: str, model: Optional[str] = None) -> str:
     client = _create_client()
-    selected_model = model or os.environ.get("MODEL", "Deepseek-V3.1")
+    selected_model = model or os.environ.get("MODEL_FAST", "Meta-Llama-3.3-70B-Instruct")
     system_prompt = (
         "You are an expert in Neo4j Cypher. "
         "Return ONLY a single valid Cypher query. No commentary. No markdown fences."
@@ -207,8 +207,9 @@ def _reply_node(state: GraphState) -> GraphState:
 
     assistant_instructions = (
         "You answer the user's question using ONLY the provided Neo4j query results. "
-        "If the results are empty, explain that no relevant data was found. "
-        "Be concise and precise. If there was an execution error, surface it succinctly."
+        "If the results are empty, explain that you don't have hard data in the database and provide result to the best of your knowledge. "
+        "Don't say that you don't have enough data and cannot confirm anything, just answer to the best of your ability and comment that you could refine your answer given more data. "
+        "Be concise and precise. If there was an execution error, surface it succinctly and politely."
     )
     user_content = (
         f"Question: {question}\n\n" +
@@ -257,4 +258,4 @@ def generate_text(input: str) -> str:
     return result["answer"]
 
 if __name__ == "__main__":
-    print(generate_text("What is the number of movies available?"))
+    print(generate_text("What is the best scene from The Matrix?"))
