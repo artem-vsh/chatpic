@@ -4,20 +4,18 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Chatpic</title>
+  <!-- Tailwind Play CDN (dev/test only) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
         extend: {
-          boxShadow: {
-            soft: '0 10px 25px -10px rgba(0,0,0,0.15)'
-          }
+          boxShadow: { soft: '0 10px 25px -10px rgba(0,0,0,0.15)' }
         }
       }
     }
   </script>
   <style>
-    /* Smooth height transitions for the textarea wrapper */
     .h-transition { transition: max-height 200ms ease; }
   </style>
 </head>
@@ -27,6 +25,7 @@
       <!-- Header / Brand -->
       <header class="mb-5">
         <h1 class="text-2xl font-semibold tracking-tight">Chatpic</h1>
+        <p class="text-sm text-neutral-500">Send a prompt → get text → generate an image from that text.</p>
       </header>
 
       <!-- INPUT CARD -->
@@ -39,7 +38,6 @@
               <!-- Expand/Collapse button -->
               <button id="expandBtn" type="button" title="Expand to fit content" aria-label="Expand to fit content"
                 class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-100">
-                <!-- Maximize icon -->
                 <svg id="iconExpand" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
                 <svg id="iconCollapse" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4 hidden"><path d="M15 21h6v-6"/><path d="M9 3H3v6"/><path d="M21 21l-7-7"/><path d="M3 3l7 7"/></svg>
                 <span class="hidden sm:inline">Expand</span>
@@ -55,7 +53,6 @@
             <button id="sendBtn" type="button" aria-label="Send" title="Send"
               class="absolute bottom-2 right-2 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500 disabled:opacity-40 disabled:pointer-events-none">
               <span class="hidden sm:inline">Send</span>
-              <!-- Paper plane icon -->
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
             </button>
           </div>
@@ -82,7 +79,13 @@
             <!-- Image column -->
             <div class="flex flex-col">
               <div class="relative h-[50vh] md:h-[60vh] rounded-xl border border-neutral-200 overflow-hidden grid place-items-center bg-neutral-50">
-                <!-- Inline SVG placeholder (no network needed) -->
+                <!-- Spinner overlay (hidden by default) -->
+                <div id="imgLoading" class="hidden absolute inset-0 grid place-items-center bg-white/40 backdrop-blur-[1px]">
+                  <svg class="w-8 h-8 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9" class="opacity-25"/><path d="M12 3a9 9 0 0 1 9 9"/></svg>
+                </div>
+                <!-- Image element (hidden until loaded) -->
+                <img id="imgEl" alt="Generated" class="w-full h-full object-contain hidden" />
+                <!-- Inline SVG placeholder -->
                 <svg id="imgOut" viewBox="0 0 600 400" class="w-full h-full object-contain">
                   <defs>
                     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
@@ -104,6 +107,7 @@
         </div>
       </section>
 
+      <footer class="py-6 text-center text-xs text-neutral-400">Built with Tailwind (Play CDN) · For local testing only</footer>
     </div>
   </main>
 
@@ -116,23 +120,97 @@
     const iconExpand = document.getElementById('iconExpand');
     const iconCollapse = document.getElementById('iconCollapse');
 
-    // Auto-enable/disable Send button
+    const imgEl = document.getElementById('imgEl');
+    const imgPlaceholder = document.getElementById('imgOut');
+    const imgLoading = document.getElementById('imgLoading');
+
+    // === API CONFIG & HELPERS ===
+    const API = {
+      base: 'https://ac860615faca.ngrok-free.app',
+      text: '/ask-movie-question',   // POST { question: string } → JSON { model_response: string, ... }
+      image: '/generate-image',      // POST { text: string } → plain string (URL/base64) or JSON
+    };
+    const API_KEY = '';
+    const DEFAULT_HEADERS = () => {
+      const h = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true',
+      };
+      if (API_KEY) h['Authorization'] = 'Bearer ' + API_KEY;
+      return h;
+    };
+
+    async function postJSON(path, payload, signal) {
+      const url = path.startsWith('http') ? path : API.base + path;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: DEFAULT_HEADERS(),
+        body: JSON.stringify(payload ?? {}),
+        signal,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${text}`);
+      }
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      if (ct.startsWith('image/')) {
+        const blob = await res.blob();
+        return { url: URL.createObjectURL(blob) };
+      }
+      if (ct.includes('application/json')) return res.json();
+      // text/plain or unknown → treat as raw text
+      return { text: await res.text() };
+    }
+
+    function extractText(resp) {
+      if (!resp) return '';
+      if (typeof resp === 'string') return resp;
+      if (resp.model_response) return resp.model_response; // per /ask-movie-question
+      if (resp.text) return resp.text;
+      if (resp.message) return resp.message;
+      if (resp.content) return resp.content;
+      if (resp.choices && resp.choices[0]) return resp.choices[0].message?.content || resp.choices[0].text || '';
+      return JSON.stringify(resp);
+    }
+
+    function extractImage(resp) {
+      if (!resp) return null;
+      // Explicit url fields
+      if (resp.image_url) return resp.image_url;
+      if (resp.url) return resp.url;
+      // If the server returned plain text under .text
+      if (typeof resp.text === 'string') return coerceToImageUrl(resp.text);
+      // If the entire resp is a string
+      if (typeof resp === 'string') return coerceToImageUrl(resp);
+      // Common JSON arrays like { data: [{ url }] }
+      if (resp.data && resp.data[0] && resp.data[0].url) return resp.data[0].url;
+      // Base64 keys
+      const b64 = resp.b64 || resp.b64_png || resp.b64_jpg || resp.b64_image;
+      if (typeof b64 === 'string') return `data:image/png;base64,${b64}`;
+      return null;
+    }
+
+    function coerceToImageUrl(str) {
+      const s = String(str || '').trim();
+      if (!s) return null;
+      if (s.startsWith('http') || s.startsWith('data:')) return s; // URL or data URI
+      // Fallback: assume base64 PNG
+      return `data:image/png;base64,${s}`;
+    }
+
+    // UI helpers
     const updateSendState = () => {
       const hasText = promptEl.value.trim().length > 0;
       sendBtn.disabled = !hasText;
     };
     updateSendState();
 
-    // Auto-grow textarea (up to wrapper max-height unless expanded)
     const autoGrow = () => {
       promptEl.style.height = 'auto';
       promptEl.style.height = promptEl.scrollHeight + 'px';
     };
-    promptEl.addEventListener('input', () => {
-      autoGrow();
-      updateSendState();
-    });
-    // Initial size
+    promptEl.addEventListener('input', () => { autoGrow(); updateSendState(); });
     autoGrow();
 
     // Expand/Collapse logic toggles wrapper max-height cap
@@ -143,11 +221,10 @@
         taWrap.style.maxHeight = '70vh';
         iconExpand.classList.add('hidden');
         iconCollapse.classList.remove('hidden');
-        expandBtn.querySelector('span')?.classList.remove('hidden');
         expandBtn.title = 'Collapse';
         expandBtn.setAttribute('aria-label', 'Collapse');
       } else {
-        taWrap.style.maxHeight = '10rem'; // ~ max-h-40
+        taWrap.style.maxHeight = '10rem';
         iconExpand.classList.remove('hidden');
         iconCollapse.classList.add('hidden');
         expandBtn.title = 'Expand to fit content';
@@ -166,35 +243,72 @@
     sendBtn.addEventListener('click', trySend);
 
     function trySend() {
-      const text = promptEl.value.trim();
-      if (!text) return;
+      const userPrompt = promptEl.value.trim();
+      if (!userPrompt) return;
 
-      // Append a simple message block to the text output
-      const block = document.createElement('div');
-      block.className = 'mb-4';
-      block.innerHTML = `
+      // Add 'You' block
+      const you = document.createElement('div');
+      you.className = 'mb-4';
+      you.innerHTML = `
         <div class="text-[11px] uppercase tracking-wide text-neutral-400">You</div>
-        <div class="mt-1 whitespace-pre-wrap">${escapeHtml(text)}</div>
-        <div class="mt-3 text-[11px] uppercase tracking-wide text-neutral-400">Assistant</div>
-        <div class="mt-1 text-neutral-700">(Demo) Received your prompt. Replace this with real API output.</div>
+        <div class="mt-1 whitespace-pre-wrap">${escapeHtml(userPrompt)}</div>
       `;
-      textOut.appendChild(block);
+      textOut.appendChild(you);
+
+      // Add 'Assistant' placeholder block
+      const asst = document.createElement('div');
+      asst.className = 'mb-4';
+      const textId = `t_${Date.now()}`;
+      asst.innerHTML = `
+        <div class="text-[11px] uppercase tracking-wide text-neutral-400">Assistant</div>
+        <div id="${textId}" class="mt-1 text-neutral-700">Generating text…</div>
+      `;
+      textOut.appendChild(asst);
       textOut.scrollTop = textOut.scrollHeight;
 
-      // (Optional) Update the SVG placeholder text to show something changed
-      const svg = document.getElementById('imgOut');
-      if (svg) {
-        const existing = svg.querySelector('text');
-        if (existing) existing.textContent = 'Image Area (demo)';
-      }
+      // Image loading UI
+      imgLoading.classList.remove('hidden');
+      imgEl.classList.add('hidden');
+      imgPlaceholder.classList.remove('hidden');
 
+      // Reset input
       promptEl.value = '';
       autoGrow();
       updateSendState();
+
+      const controller = new AbortController();
+
+      (async () => {
+        try {
+          // 1) TEXT GENERATION: /ask-movie-question { question }
+          const textPayload = { question: userPrompt };
+          const textResp = await postJSON(API.text, textPayload, controller.signal);
+          const generated = extractText(textResp) || '(no text returned)';
+          const textDiv = document.getElementById(textId);
+          if (textDiv) textDiv.textContent = generated;
+
+          // 2) IMAGE GENERATION: /generate-image { text }
+          const imagePayload = { text: generated };
+          const imgResp = await postJSON(API.image, imagePayload, controller.signal);
+          let imgUrl = extractImage(imgResp);
+          if (!imgUrl) throw new Error('No image returned');
+
+          imgEl.src = imgUrl;
+          imgEl.onload = () => URL.revokeObjectURL?.(imgUrl); // cleanup if blob
+          imgEl.classList.remove('hidden');
+          imgPlaceholder.classList.add('hidden');
+        } catch (err) {
+          const textDiv = document.getElementById(textId);
+          if (textDiv) textDiv.innerHTML = `<span class='text-red-600'>Error:</span> ${escapeHtml(String(err.message || err))}`;
+        } finally {
+          imgLoading.classList.add('hidden');
+          textOut.scrollTop = textOut.scrollHeight;
+        }
+      })();
     }
 
     function escapeHtml(str) {
-      return str
+      return String(str)
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
         .replaceAll('>', '&gt;')
