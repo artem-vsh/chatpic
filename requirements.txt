@@ -1,6 +1,6 @@
 openai
 neo4j
-galileo
+galileo[openai]
 langgraph
 google-genai
 python-dotenv

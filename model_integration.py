@@ -3,8 +3,8 @@ from openai import OpenAI
 from neo4j import GraphDatabase
 from langgraph.graph import StateGraph, END
 from typing import TypedDict, List, Dict, Any, Optional
-#from galileo import galileo_context # The Galileo context manager
-#from galileo.openai import openai as gal_openai
+from galileo import galileo_context
+from galileo.openai import openai as gal_openai
 import json
 import os
 import re
@@ -31,7 +31,7 @@ class GraphState(TypedDict, total=False):
 
 
 def _create_client() -> OpenAI:
-    sn_client = OpenAI(base_url="https://api.sambanova.ai/v1/",
+    sn_client = gal_openai.OpenAI(base_url="https://api.sambanova.ai/v1/",
         api_key=os.environ.get("SAMBANOVA_API_KEY"))
 
     # model = "DeepSeek-R1-Distill-Llama-70B"
@@ -260,15 +260,15 @@ def set_up_agents():
     return graph.compile()
 
 
-def agent_querydb(question: str) -> str:
-    """Run the compiled graph end-to-end and return the final answer string."""
-    app = set_up_agents()
-    final_state = app.invoke({"question": question})
-    return final_state.get("answer", "")
-
 graph = set_up_agents()
-def generate_text(input: str) -> str:
-    result = graph.invoke({"question": input})
+def generate_text(
+    input: str,
+    session_id: Optional[str] = None,
+    run_name: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> str:
+    with galileo_context():
+        result = graph.invoke({"question": input})
 
     answer = result.get("answer", "")
     # Remove <think>...</think> tags and any content inside, if present
