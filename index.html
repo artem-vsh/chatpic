@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chatpic</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          boxShadow: {
+            soft: '0 10px 25px -10px rgba(0,0,0,0.15)'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Smooth height transitions for the textarea wrapper */
+    .h-transition { transition: max-height 200ms ease; }
+  </style>
+</head>
+<body class="bg-neutral-50 text-neutral-900 antialiased selection:bg-indigo-200/50">
+  <main class="min-h-screen w-full flex items-start justify-center py-8 px-4">
+    <div class="w-full max-w-[800px]">
+      <!-- Header / Brand -->
+      <header class="mb-5">
+        <h1 class="text-2xl font-semibold tracking-tight">Chatpic</h1>
+      </header>
+
+      <!-- INPUT CARD -->
+      <section class="relative rounded-2xl bg-white shadow-soft border border-neutral-200">
+        <div class="p-3 sm:p-4">
+          <!-- Toolbar Row -->
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs sm:text-sm text-neutral-500">Prompt</span>
+            <div class="flex items-center gap-1">
+              <!-- Expand/Collapse button -->
+              <button id="expandBtn" type="button" title="Expand to fit content" aria-label="Expand to fit content"
+                class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-100">
+                <!-- Maximize icon -->
+                <svg id="iconExpand" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
+                <svg id="iconCollapse" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4 hidden"><path d="M15 21h6v-6"/><path d="M9 3H3v6"/><path d="M21 21l-7-7"/><path d="M3 3l7 7"/></svg>
+                <span class="hidden sm:inline">Expand</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Textarea Wrapper (caps height unless expanded) -->
+          <div id="taWrap" class="relative h-transition max-h-40 overflow-hidden rounded-xl ring-1 ring-neutral-200 focus-within:ring-indigo-400">
+            <textarea id="prompt" rows="4" placeholder="Write your prompt…"
+              class="w-full resize-y bg-transparent p-3 pr-16 outline-none placeholder:text-neutral-400 text-sm leading-relaxed" spellcheck="true"></textarea>
+            <!-- Send Button -->
+            <button id="sendBtn" type="button" aria-label="Send" title="Send"
+              class="absolute bottom-2 right-2 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500 disabled:opacity-40 disabled:pointer-events-none">
+              <span class="hidden sm:inline">Send</span>
+              <!-- Paper plane icon -->
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="h-4 w-4"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+            </button>
+          </div>
+          <p class="mt-2 text-[11px] text-neutral-500">Tip: <kbd class="rounded bg-neutral-100 px-1.5 py-0.5">Enter</kbd> to send, <kbd class="rounded bg-neutral-100 px-1.5 py-0.5">Shift</kbd>+<kbd class="rounded bg-neutral-100 px-1.5 py-0.5">Enter</kbd> for newline.</p>
+        </div>
+      </section>
+
+      <!-- OUTPUT AREA -->
+      <section class="mt-6">
+        <div class="rounded-2xl bg-white shadow-soft border border-neutral-200">
+          <div class="p-3 sm:p-4 border-b border-neutral-100">
+            <h2 class="text-sm font-medium text-neutral-700">Response</h2>
+          </div>
+
+          <!-- Columns -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 p-3 sm:p-4">
+            <!-- Scrollable text column -->
+            <div class="flex flex-col">
+              <div id="textOut" class="prose prose-sm max-w-none h-[50vh] md:h-[60vh] overflow-y-auto rounded-xl border border-neutral-200 p-3">
+                <p class="text-neutral-500">Your responses will appear here.</p>
+              </div>
+            </div>
+
+            <!-- Image column -->
+            <div class="flex flex-col">
+              <div class="relative h-[50vh] md:h-[60vh] rounded-xl border border-neutral-200 overflow-hidden grid place-items-center bg-neutral-50">
+                <!-- Inline SVG placeholder (no network needed) -->
+                <svg id="imgOut" viewBox="0 0 600 400" class="w-full h-full object-contain">
+                  <defs>
+                    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stop-color="#eef2ff"/>
+                      <stop offset="100%" stop-color="#e9d5ff"/>
+                    </linearGradient>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#g)"/>
+                  <g fill="#4f46e5" opacity="0.8">
+                    <circle cx="150" cy="120" r="40"/>
+                    <rect x="240" y="160" width="160" height="110" rx="16"/>
+                    <path d="M80 340 C 140 260, 320 260, 520 340" fill="none" stroke="#4f46e5" stroke-width="6"/>
+                  </g>
+                  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="24" fill="#312e81">Image Area</text>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <script>
+    const promptEl = document.getElementById('prompt');
+    const sendBtn = document.getElementById('sendBtn');
+    const textOut = document.getElementById('textOut');
+    const taWrap = document.getElementById('taWrap');
+    const expandBtn = document.getElementById('expandBtn');
+    const iconExpand = document.getElementById('iconExpand');
+    const iconCollapse = document.getElementById('iconCollapse');
+
+    // Auto-enable/disable Send button
+    const updateSendState = () => {
+      const hasText = promptEl.value.trim().length > 0;
+      sendBtn.disabled = !hasText;
+    };
+    updateSendState();
+
+    // Auto-grow textarea (up to wrapper max-height unless expanded)
+    const autoGrow = () => {
+      promptEl.style.height = 'auto';
+      promptEl.style.height = promptEl.scrollHeight + 'px';
+    };
+    promptEl.addEventListener('input', () => {
+      autoGrow();
+      updateSendState();
+    });
+    // Initial size
+    autoGrow();
+
+    // Expand/Collapse logic toggles wrapper max-height cap
+    let expanded = false;
+    expandBtn.addEventListener('click', () => {
+      expanded = !expanded;
+      if (expanded) {
+        taWrap.style.maxHeight = '70vh';
+        iconExpand.classList.add('hidden');
+        iconCollapse.classList.remove('hidden');
+        expandBtn.querySelector('span')?.classList.remove('hidden');
+        expandBtn.title = 'Collapse';
+        expandBtn.setAttribute('aria-label', 'Collapse');
+      } else {
+        taWrap.style.maxHeight = '10rem'; // ~ max-h-40
+        iconExpand.classList.remove('hidden');
+        iconCollapse.classList.add('hidden');
+        expandBtn.title = 'Expand to fit content';
+        expandBtn.setAttribute('aria-label', 'Expand to fit content');
+      }
+      autoGrow();
+    });
+
+    // Enter to send, Shift+Enter for newline
+    promptEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        trySend();
+      }
+    });
+    sendBtn.addEventListener('click', trySend);
+
+    function trySend() {
+      const text = promptEl.value.trim();
+      if (!text) return;
+
+      // Append a simple message block to the text output
+      const block = document.createElement('div');
+      block.className = 'mb-4';
+      block.innerHTML = `
+        <div class="text-[11px] uppercase tracking-wide text-neutral-400">You</div>
+        <div class="mt-1 whitespace-pre-wrap">${escapeHtml(text)}</div>
+        <div class="mt-3 text-[11px] uppercase tracking-wide text-neutral-400">Assistant</div>
+        <div class="mt-1 text-neutral-700">(Demo) Received your prompt. Replace this with real API output.</div>
+      `;
+      textOut.appendChild(block);
+      textOut.scrollTop = textOut.scrollHeight;
+
+      // (Optional) Update the SVG placeholder text to show something changed
+      const svg = document.getElementById('imgOut');
+      if (svg) {
+        const existing = svg.querySelector('text');
+        if (existing) existing.textContent = 'Image Area (demo)';
+      }
+
+      promptEl.value = '';
+      autoGrow();
+      updateSendState();
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    // Set initial cap to match Tailwind's max-h-40
+    taWrap.style.maxHeight = '10rem';
+  </script>
+</body>
+</html>
