@@ -126,7 +126,7 @@
 
     // === API CONFIG & HELPERS ===
     const API = {
-      base: 'https://ac860615faca.ngrok-free.app',
+      base: 'https://9030b2966fba.ngrok-free.app',
       text: '/ask-movie-question',   // POST { question: string } → JSON { model_response: string, ... }
       image: '/generate-image',      // POST { text: string } → plain string (URL/base64) or JSON
     };
@@ -195,8 +195,28 @@
       const s = String(str || '').trim();
       if (!s) return null;
       if (s.startsWith('http') || s.startsWith('data:')) return s; // URL or data URI
-      // Fallback: assume base64 PNG
       return `data:image/png;base64,${s}`;
+    }
+
+    // Specialized helper for image blob endpoint (friend snippet)
+    async function postImageBlob(path, payload, signal) {
+      const url = path.startsWith('http') ? path : API.base + path;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'image/*,application/octet-stream',
+          'ngrok-skip-browser-warning': 'true',
+        },
+        body: JSON.stringify(payload ?? {}),
+        signal,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${text}`);
+      }
+      const blob = await res.blob();
+      return URL.createObjectURL(blob);
     }
 
     // UI helpers
@@ -287,14 +307,12 @@
           const textDiv = document.getElementById(textId);
           if (textDiv) textDiv.textContent = generated;
 
-          // 2) IMAGE GENERATION: /generate-image { text }
+          // 2) IMAGE GENERATION: /generate-image { text } (using blob response)
           const imagePayload = { text: generated };
-          const imgResp = await postJSON(API.image, imagePayload, controller.signal);
-          let imgUrl = extractImage(imgResp);
-          if (!imgUrl) throw new Error('No image returned');
+          const imgUrl = await postImageBlob(API.image, imagePayload, controller.signal);
 
           imgEl.src = imgUrl;
-          imgEl.onload = () => URL.revokeObjectURL?.(imgUrl); // cleanup if blob
+          imgEl.onload = () => URL.revokeObjectURL?.(imgUrl); // free blob URL after load
           imgEl.classList.remove('hidden');
           imgPlaceholder.classList.add('hidden');
         } catch (err) {
