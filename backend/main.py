@@ -6,8 +6,18 @@ from datetime import datetime
 import logging
 import os
 from dotenv import load_dotenv
-import io
+import io, sys
 # from PIL import Image
+
+# Add the parent directory to Python path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import model_integration
+import model_integration_image
+
+
+from PIL import Image
+import io
 
 load_dotenv()
 
@@ -58,19 +68,13 @@ async def ask_movie_question(request: MovieQuestionRequest):
     """
     try:
         logger.info(f"Received movie question: {request.question}")
-        
-        # TODO: Replace this mock response with actual Gemini API call
-        # Example integration:
-        # import google.generativeai as genai
-        # genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        # model = genai.GenerativeModel('gemini-pro')
-        # response = model.generate_content(request.question)
-        # model_response = response.text
-        
-        mock_response = f"This is a mock response about your movie question: '{request.question}'. Replace this with actual Gemini API integration."
+
+        response = model_integration.generate_text(request.question)
+
+        # mock_response = f"This is a mock response about your movie question: '{request.question}'. Replace this with actual Gemini API integration."
         
         return MovieQuestionResponse(
-            model_response=mock_response,
+            model_response=response,
             status="success",
             question_received=request.question,
             timestamp=datetime.now().isoformat()
@@ -93,23 +97,25 @@ async def generate_image(request: ImageGenerationRequest):
     """
     try:
         logger.info(f"Received image generation request: {request.text}")
+
+
+        image_data = model_integration_image.generate_image(request.text)
+
+        # logger.info(f"Generated image data: {image_data}")
+
+        # Convert to PIL Image if needed
+        image = Image.open(io.BytesIO(image_data))
         
-        # TODO: Replace this mock image with actual Gemini API call
-        # Example integration:
-        # import google.generativeai as genai
-        # genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        # model = genai.GenerativeModel('gemini-pro-vision') # or appropriate model
-        # response = model.generate_content([request.text])
-        # image_data = response.image_data  # Process according to API response format
+        # Process the image if needed (resize, format conversion, etc.)
+        # image = image.resize((400, 300))  # Example processing
         
-        # Create a simple placeholder image for now
-        # img = Image.new('RGB', (400, 300), color='lightblue')
-        # img_buffer = io.BytesIO()
-        # img.save(img_buffer, format='PNG')
-        # img_buffer.seek(0)
+        # Convert back to bytes
+        img_buffer = io.BytesIO()
+        image.save(img_buffer, format='PNG')
+        img_buffer.seek(0)
         
         return Response(
-            content="img_buffer.getvalue()",
+            content=img_buffer.getvalue(),
             media_type="image/png",
             headers={"Content-Disposition": "inline; filename=generated_image.png"}
         )
